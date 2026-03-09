@@ -9,6 +9,15 @@ import {
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
+  const dbUrl = process.env.DATABASE_URL;
+
+  try {
+    const host = dbUrl ? new URL(dbUrl).hostname : "SEM_DATABASE_URL";
+    console.log("DEBUG DATABASE HOST:", host);
+  } catch {
+    console.log("DEBUG DATABASE HOST: URL_INVALIDA");
+  }
+
   try {
     await ensureDefaultAdmin();
 
