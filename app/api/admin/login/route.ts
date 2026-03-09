@@ -2,28 +2,25 @@ import prisma from "@/lib/prisma";
 import {
   ADMIN_COOKIE_NAME,
   adminCookieOptions,
+  adminEstaBloqueado,
   checkPassword,
   createAdminSessionToken,
   ensureDefaultAdmin,
+  precisaCaptcha,
+  registrarFalhaLoginAdmin,
+  resetarSegurancaLoginAdmin,
+  TEMPO_BLOQUEIO_MINUTOS,
 } from "@/lib/admin-auth";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-  const dbUrl = process.env.DATABASE_URL;
-
-  try {
-    const host = dbUrl ? new URL(dbUrl).hostname : "SEM_DATABASE_URL";
-    console.log("DEBUG DATABASE HOST:", host);
-  } catch {
-    console.log("DEBUG DATABASE HOST: URL_INVALIDA");
-  }
-
   try {
     await ensureDefaultAdmin();
 
     const body = await req.json();
     const usuario = String(body?.usuario ?? "").trim();
     const senha = String(body?.senha ?? "").trim();
+    const captchaToken = String(body?.captchaToken ?? "").trim();
 
     if (!usuario || !senha) {
       return NextResponse.json(
@@ -43,14 +40,50 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (adminEstaBloqueado(admin.bloqueadoAte)) {
+      return NextResponse.json(
+        {
+          erro: `Login bloqueado temporariamente. Tente novamente em ${TEMPO_BLOQUEIO_MINUTOS} minutos.`,
+          bloqueado: true,
+        },
+        { status: 429 }
+      );
+    }
+
+    if (admin.captchaObrigatorio && !captchaToken) {
+      return NextResponse.json(
+        {
+          erro: "Confirme que você não é um robô para continuar.",
+          captchaObrigatorio: true,
+        },
+        { status: 400 }
+      );
+    }
+
     const senhaOk = await checkPassword(admin.senhaHash, senha);
 
     if (!senhaOk) {
+      const adminAtualizado = await registrarFalhaLoginAdmin(
+        admin.id,
+        admin.tentativasLogin
+      );
+
+      const agoraBloqueado = adminEstaBloqueado(adminAtualizado.bloqueadoAte);
+
       return NextResponse.json(
-        { erro: "Usuário ou senha inválidos" },
-        { status: 401 }
+        {
+          erro: agoraBloqueado
+            ? `Login bloqueado temporariamente. Tente novamente em ${TEMPO_BLOQUEIO_MINUTOS} minutos.`
+            : "Usuário ou senha inválidos",
+          captchaObrigatorio: adminAtualizado.captchaObrigatorio,
+          bloqueado: agoraBloqueado,
+          tentativasRestantes: Math.max(0, 3 - adminAtualizado.tentativasLogin),
+        },
+        { status: agoraBloqueado ? 429 : 401 }
       );
     }
+
+    await resetarSegurancaLoginAdmin(admin.id);
 
     const sessionToken = createAdminSessionToken();
 

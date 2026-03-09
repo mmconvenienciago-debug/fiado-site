@@ -7,12 +7,15 @@ datasource db {
 }
 
 model Admin {
-  id           Int      @id @default(autoincrement())
-  usuario      String   @unique
-  senhaHash    String
-  sessionToken String?  @unique
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                  Int       @id @default(autoincrement())
+  usuario             String    @unique
+  senhaHash           String
+  sessionToken        String?   @unique
+  tentativasLogin     Int       @default(0)
+  captchaObrigatorio  Boolean   @default(false)
+  bloqueadoAte        DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 }
 
 model Cliente {

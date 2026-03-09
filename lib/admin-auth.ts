@@ -6,6 +6,10 @@ export const ADMIN_COOKIE_NAME = "admin_session";
 export const DEFAULT_ADMIN_USUARIO = "admconveniencia";
 export const DEFAULT_ADMIN_SENHA = "a1b2c3";
 
+export const MAX_TENTATIVAS_SEM_CAPTCHA = 3;
+export const MAX_TENTATIVAS_TOTAL = 6;
+export const TEMPO_BLOQUEIO_MINUTOS = 15;
+
 export function createAdminSessionToken() {
   return `${crypto.randomUUID()}-${crypto.randomUUID()}`;
 }
@@ -63,4 +67,43 @@ export function onlyDigits(value: string) {
 
 export function pinPadraoPorTelefone(telefone: string) {
   return onlyDigits(telefone).slice(-4);
+}
+
+export function adminEstaBloqueado(bloqueadoAte: Date | null) {
+  if (!bloqueadoAte) return false;
+  return bloqueadoAte.getTime() > Date.now();
+}
+
+export function precisaCaptcha(tentativasLogin: number) {
+  return tentativasLogin >= MAX_TENTATIVAS_SEM_CAPTCHA;
+}
+
+export function calcularBloqueioAte() {
+  return new Date(Date.now() + TEMPO_BLOQUEIO_MINUTOS * 60 * 1000);
+}
+
+export async function registrarFalhaLoginAdmin(adminId: number, tentativasAtuais: number) {
+  const novasTentativas = tentativasAtuais + 1;
+  const deveExigirCaptcha = novasTentativas >= MAX_TENTATIVAS_SEM_CAPTCHA;
+  const deveBloquear = novasTentativas >= MAX_TENTATIVAS_TOTAL;
+
+  return prisma.admin.update({
+    where: { id: adminId },
+    data: {
+      tentativasLogin: novasTentativas,
+      captchaObrigatorio: deveExigirCaptcha,
+      bloqueadoAte: deveBloquear ? calcularBloqueioAte() : null,
+    },
+  });
+}
+
+export async function resetarSegurancaLoginAdmin(adminId: number) {
+  return prisma.admin.update({
+    where: { id: adminId },
+    data: {
+      tentativasLogin: 0,
+      captchaObrigatorio: false,
+      bloqueadoAte: null,
+    },
+  });
 }
